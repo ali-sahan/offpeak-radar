@@ -2,6 +2,8 @@
 
 **Unofficial peak / off-peak pricing clock for the DeepSeek API.**
 
+**▶ Live demo: [ali-sahan.github.io/offpeak-radar](https://ali-sahan.github.io/offpeak-radar/)**
+
 A single-file web page that shows whether the DeepSeek API is currently in **peak** or **off-peak** (discounted) pricing, with a live countdown to the next change, a 7-day overview in your local time, and the current prices for every model.
 
 **No prices, peak hours or holidays are stored in this project.** Everything is read live from the official sources each time the page is opened.
@@ -45,8 +47,9 @@ These are free third-party services and can be slow or unavailable. For more rel
 
 ## Usage
 
+- **Online:** open [ali-sahan.github.io/offpeak-radar](https://ali-sahan.github.io/offpeak-radar/). No installation needed.
 - **Locally:** download `index.html` and open it in a browser.
-- **GitHub Pages:** enable Pages for the repository (Settings → Pages → deploy from branch). The page is then available at `https://<user>.github.io/<repo>/`.
+- **Your own copy:** fork the repository and enable GitHub Pages (Settings → Pages → deploy from branch `main`, folder `/ (root)`). Your copy is then available at `https://<your-username>.github.io/offpeak-radar/`.
 
 ### URL parameters
 
@@ -60,6 +63,8 @@ Parameters can be combined:
 ```
 index.html?lang=de&now=2026-10-01T03:00:00Z
 ```
+
+Try it live: [German, on Chinese National Day](https://ali-sahan.github.io/offpeak-radar/?lang=de&now=2026-10-01T03:00:00Z)
 
 Useful test moments:
 
