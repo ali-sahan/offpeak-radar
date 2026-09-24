@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Off-Peak Radar</title>
+<meta name="description" content="Unofficial live clock showing when off-peak (discounted) DeepSeek API pricing applies, in your own time zone. Prices and peak hours are read live from the official pricing page. Not affiliated with DeepSeek.">
+<meta property="og:title" content="Off-Peak Radar">
+<meta property="og:description" content="Unofficial live peak / off-peak pricing clock for the DeepSeek API, in your own time zone.">
+<meta property="og:type" content="website">
+<style>
+  :root {
+    --bg: #0e1014;
+    --card: #161a22;
+    --line: #262c38;
+    --text: #e7e9ee;
+    --muted: #8a92a6;
+    --off: #2dd4bf;
+    --off-soft: rgba(45, 212, 191, .12);
+    --peak: #fbbf24;
+    --peak-soft: rgba(251, 191, 36, .14);
+    --link: #7dd3fc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px 16px 48px;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  main { max-width: 760px; margin: 0 auto; }
+  a { color: var(--link); }
+  .off  { --accent: var(--off);  --accent-soft: var(--off-soft); }
+  .peak { --accent: var(--peak); --accent-soft: var(--peak-soft); }
+
+  /* Header */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 30px; height: 30px; border-radius: 50%; flex: none;
+    background: conic-gradient(var(--peak) 0 25%, var(--off) 25% 100%);
+    -webkit-mask: radial-gradient(circle, transparent 42%, #000 44%);
+    mask: radial-gradient(circle, transparent 42%, #000 44%);
+  }
+  .name { font-size: 17px; font-weight: 700; }
+  .tagline { color: var(--muted); font-size: 13px; }
+  .controls { display: flex; align-items: center; gap: 8px; }
+  .toggle { display: inline-flex; padding: 2px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+  .toggle button { padding: 4px 10px; background: transparent; color: var(--muted); border: 0; border-radius: 6px; font: inherit; font-size: 13px; cursor: pointer; }
+  .toggle button.active { background: var(--line); color: var(--text); }
+
+  /* Language dropdown */
+  .langs { position: relative; }
+  .lang-current { display: flex; align-items: center; gap: 6px; padding: 5px 10px; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .lang-current:hover, .lang-current[aria-expanded="true"] { border-color: var(--muted); }
+  .lang-current .caret { color: var(--muted); font-size: 11px; }
+  .lang-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 10; min-width: 64px; margin: 0; padding: 4px; list-style: none; background: var(--card); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+  .lang-menu button { display: block; width: 100%; padding: 6px 12px; background: transparent; color: var(--text); border: 0; border-radius: 5px; font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; }
+  .lang-menu button:hover { background: var(--line); }
+  .lang-menu button.active { color: var(--off); }
+
+  /* Cards */
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; margin-bottom: 16px; }
+  .pad { padding: 20px 22px; }
+  .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .card-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  .card-head span { color: var(--muted); font-size: 12px; }
+  .sub { color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 4px; }
+
+  /* Hero: countdown ring + status */
+  .hero {
+    display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center; padding: 24px;
+    background: linear-gradient(135deg, var(--accent-soft), transparent 55%), var(--card);
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  }
+  .ring { width: 200px; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--accent) calc(var(--p) * 1%), var(--line) 0); }
+  .ring-inner { width: calc(100% - 18px); aspect-ratio: 1; border-radius: 50%; background: var(--card); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .ring-days { color: var(--accent); font-size: 15px; font-weight: 600; }
+  .ring-time { font-size: 36px; font-weight: 700; line-height: 1.15; }
+  .ring-label { color: var(--muted); font-size: 13px; }
+  .pill { display: inline-block; padding: 4px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .next-change { margin: 12px 0 4px; font-size: 18px; font-weight: 600; }
+  .note { margin-top: 8px; padding-left: 10px; border-left: 2px solid var(--accent); color: var(--muted); font-size: 13px; }
+  .upcoming { margin-top: 18px; }
+  .upcoming ol { margin: 0; padding: 0; list-style: none; }
+  .upcoming li { display: grid; grid-template-columns: 10px 1fr auto auto; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .upcoming .kind { color: var(--accent); }
+  .upcoming .dur { min-width: 60px; color: var(--muted); text-align: right; }
+
+  /* 7-day overview */
+  .week { display: grid; gap: 7px; }
+  .day { display: grid; grid-template-columns: 76px 1fr 64px; gap: 10px; align-items: center; font-size: 13px; }
+  .day-label { color: var(--muted); }
+  .day.today .day-label { color: var(--text); font-weight: 600; }
+  .strip { position: relative; height: 14px; border-radius: 4px; background: var(--line); overflow: hidden; }
+  .strip .seg { position: absolute; top: 0; bottom: 0; }
+  .seg.off, .legend i.off { background: color-mix(in srgb, var(--off) 30%, transparent); }
+  .seg.peak, .legend i.peak { background: var(--peak); }
+  .strip .marker { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; transform: translateX(-1px); }
+  .hour-ticks { position: relative; height: 14px; }
+  .hour-ticks span { position: absolute; transform: translateX(-50%); color: var(--muted); font-size: 11px; }
+  .tag span { padding: 1px 7px; border: 1px solid color-mix(in srgb, var(--off) 45%, transparent); border-radius: 999px; color: var(--off); font-size: 11px; cursor: help; }
+  .legend { display: flex; gap: 16px; margin-top: 12px; color: var(--muted); font-size: 12px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 2px; vertical-align: -1px; }
+
+  /* Price table */
+  .price-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .price-table th, .price-table td { padding: 7px 10px; text-align: right; }
+  .price-table th:first-child, .price-table td:first-child { text-align: left; }
+  .price-table thead th { border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+  .price-table thead th.now { color: var(--accent); }
+  .price-table td { border-bottom: 1px solid var(--line); color: var(--muted); }
+  .price-table td:first-child { color: var(--text); }
+  .price-table .now { background: var(--accent-soft); }
+  .price-table td.now { color: var(--text); font-weight: 700; }
+  .price-table .model th { padding-top: 16px; text-align: left; font-weight: 600; }
+  .price-table .model code { margin-left: 6px; color: var(--muted); font-size: 11px; font-weight: 400; }
+
+  /* Footer, loading, error */
+  .foot { padding: 4px 4px 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+  .foot blockquote { margin: 8px 0; padding-left: 10px; border-left: 2px solid var(--line); }
+  .foot button { margin-top: 6px; padding: 3px 10px; background: transparent; color: var(--link); border: 1px solid var(--line); border-radius: 6px; font: inherit; cursor: pointer; }
+  .loading { padding: 48px 24px; color: var(--muted); text-align: center; }
+  .error { border-color: color-mix(in srgb, var(--peak) 50%, var(--line)); }
+  .error h2 { margin: 0 0 8px; color: var(--peak); font-size: 18px; }
+  .error ul { padding-left: 18px; color: var(--muted); font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+
+  @media (max-width: 600px) {
+    .hero { grid-template-columns: 1fr; justify-items: center; }
+    .hero-info { width: 100%; }
+    .ring { width: 180px; }
+    .ring-time { font-size: 32px; }
+    .day { grid-template-columns: 58px 1fr 54px; }
+    .price-table th, .price-table td { padding: 7px 6px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <div><div class="name">Off-Peak Radar</div><div class="tagline"></div></div>
+    </div>
+    <div class="controls">
+      <div class="toggle"><button data-mode="local">Local</button><button data-mode="utc">UTC</button></div>
+      <nav class="langs" aria-label="Language">
+        <button class="lang-current" aria-haspopup="listbox" aria-expanded="false"><span class="code"></span><span class="caret">▾</span></button>
+        <ul class="lang-menu" role="listbox" hidden></ul><!-- filled from I18N -->
+      </nav>
+    </div>
+  </header>
+  <div id="app"><div class="card loading">Reading live prices from the official DeepSeek pricing page…</div></div>
+</main>
+
+<script>
+'use strict';
+
+// ---------------------------------------------------------------------------
+// Sources. Everything (prices, peak windows, holidays) is read on page load.
+// ---------------------------------------------------------------------------
+const SOURCE_URL = 'https://api-docs.deepseek.com/quick_start/pricing/';
+
+// The official page sends no CORS headers, so a browser needs a relay.
+// Tried in order; the first one returning a parseable page wins.
+// To use your own relay (e.g. a Cloudflare Worker), add it at the top.
+const PROXIES = [
+  { name: 'direct',     url: u => u },
+  { name: 'jina.ai',    url: u => 'https://r.jina.ai/' + u, headers: { 'X-Return-Format': 'html' } },
+  { name: 'allorigins', url: u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u) },
+  { name: 'codetabs',   url: u => 'https://api.codetabs.com/v1/proxy/?quest=' + u },
+];
+
+// Official PRC public holidays (from gov.cn notices), CORS-enabled via jsDelivr.
+const HOLIDAY_URL = y => `https://cdn.jsdelivr.net/gh/NateScarlet/holiday-cn@master/${y}.json`;
+
+// ---------------------------------------------------------------------------
+// Translations. Language = browser language if listed here, otherwise English.
+// Placeholders in {braces} are filled in at runtime. ?lang=de forces a language.
+// To add a language: add an entry keyed by its code (e.g. fr) — it appears in the
+// dropdown automatically; missing keys fall back to English. Optionally add the
+// code to HOLIDAY_NAMES below (otherwise English holiday names are used).
+// ---------------------------------------------------------------------------
+const I18N = {
+  en: {
+    title:        'Off-Peak Radar',
+    subtitle:     'Unofficial peak / off-peak pricing clock for the DeepSeek API',
+    loading:      'Reading live prices from the official DeepSeek pricing page…',
+    peak:         'Peak',
+    offPeak:      'Off-peak',
+    statusPeak:   'Peak · full price',
+    statusOff:    'Off-peak · {discount}',
+    halfPrice:    'half price',
+    percentOff:   '{n}% off',
+    left:         'left',
+    starts:       '{kind} starts {when}',
+    noChange:     'No change in the next 3 weeks',
+    holidayToday: 'Chinese public holiday today ({name}): off-peak all day',
+    holidayAhead: 'Off-peak extended by Chinese public holiday: {list}',
+    upcoming:     'Upcoming changes',
+    week:         'Next 7 days',
+    today:        'Today',
+    holiday:      'Holiday',
+    local:        'Local',
+    prices:       'Prices per 1M tokens',
+    nowCol:       'Now · {kind}',
+    from:         'From {when} · {kind}',
+    input:        'Input',
+    cachedInput:  'Cached input',
+    output:       'Output',
+    footPrices:   'Prices per 1M tokens (input = cache miss). Read live from {src} via {via} at {time}.',
+    footHolidays: 'Chinese holidays from {src} ({years}).',
+    unavailable:  'unavailable',
+    missingYears: '⚠ Holiday data for {years} not available: those days are treated as normal workdays.',
+    testClock:    '⚠ Test clock active ({param}).',
+    officialRule: 'Official rule (original text):',
+    reload:       'Reload data',
+    errTitle:     "Couldn't load live pricing",
+    errRead:      'Could not read the official pricing page.',
+    errBody:      'No cached or hardcoded prices are shown. Check the {link} directly or try again.',
+    errLink:      'official pricing page',
+    tryAgain:     'Try again',
+    units:        { d: 'd', h: 'h', m: 'm' },
+  },
+  de: {
+    title:        'Off-Peak Radar',
+    subtitle:     'Inoffizielle Haupt-/Nebenzeit-Preisuhr für die DeepSeek-API',
+    loading:      'Aktuelle Preise werden von der offiziellen DeepSeek-Preisseite gelesen…',
+    peak:         'Hauptzeit',
+    offPeak:      'Nebenzeit',
+    statusPeak:   'Hauptzeit · voller Preis',
+    statusOff:    'Nebenzeit · {discount}',
+    halfPrice:    'halber Preis',
+    percentOff:   '{n} % günstiger',
+    left:         'verbleibend',
+    starts:       '{kind} beginnt {when}',
+    noChange:     'Keine Änderung in den nächsten 3 Wochen',
+    holidayToday: 'Heute gesetzlicher Feiertag in China ({name}): ganztägig Nebenzeit',
+    holidayAhead: 'Nebenzeit verlängert durch chinesischen Feiertag: {list}',
+    upcoming:     'Nächste Wechsel',
+    week:         'Nächste 7 Tage',
+    today:        'Heute',
+    holiday:      'Feiertag',
+    local:        'Lokal',
+    prices:       'Preise pro 1 Mio. Tokens',
+    nowCol:       'Jetzt · {kind}',
+    from:         'Ab {when} · {kind}',
+    input:        'Eingabe',
+    cachedInput:  'Eingabe (Cache-Treffer)',
+    output:       'Ausgabe',
+    footPrices:   'Preise pro 1 Mio. Tokens (Eingabe = Cache-Miss). Live gelesen von {src} über {via} um {time}.',
+    footHolidays: 'Chinesische Feiertage von {src} ({years}).',
+    unavailable:  'nicht verfügbar',
+    missingYears: '⚠ Feiertagsdaten für {years} nicht verfügbar: Diese Tage gelten als normale Werktage.',
+    testClock:    '⚠ Testuhr aktiv ({param}).',
+    officialRule: 'Offizielle Regel (Originaltext):',
+    reload:       'Daten neu laden',
+    errTitle:     'Aktuelle Preise konnten nicht geladen werden',
+    errRead:      'Die offizielle Preisseite konnte nicht gelesen werden.',
+    errBody:      'Es werden keine zwischengespeicherten oder fest hinterlegten Preise angezeigt. Bitte die {link} direkt prüfen oder erneut versuchen.',
+    errLink:      'offizielle Preisseite',
+    tryAgain:     'Erneut versuchen',
+    units:        { d: ' Tg.', h: ' Std.', m: ' Min.' },
+  },
+  tr: {
+    title:        'Off-Peak Radar',
+    subtitle:     'DeepSeek API için resmî olmayan yoğun / sakin saat fiyat takibi',
+    loading:      'Güncel fiyatlar resmî DeepSeek fiyat sayfasından okunuyor…',
+    peak:         'Yoğun saat',
+    offPeak:      'Sakin saat',
+    statusPeak:   'Yoğun saat · tam fiyat',
+    statusOff:    'Sakin saat · {discount}',
+    halfPrice:    'yarı fiyat',
+    percentOff:   '%{n} indirim',
+    left:         'kaldı',
+    starts:       '{kind} başlıyor: {when}',
+    noChange:     'Önümüzdeki 3 hafta içinde değişiklik yok',
+    holidayToday: "Bugün Çin'de resmî tatil ({name}): gün boyu sakin saat",
+    holidayAhead: 'Sakin saat, Çin resmî tatili nedeniyle uzadı: {list}',
+    upcoming:     'Sonraki değişiklikler',
+    week:         'Önümüzdeki 7 gün',
+    today:        'Bugün',
+    holiday:      'Tatil',
+    local:        'Yerel',
+    prices:       '1M token başına fiyatlar',
+    nowCol:       'Şimdi · {kind}',
+    from:         '{when} itibarıyla · {kind}',
+    input:        'Girdi',
+    cachedInput:  'Önbellekli girdi',
+    output:       'Çıktı',
+    footPrices:   'Fiyatlar 1M token başınadır (girdi = önbellek ıskası). {src} adresinden {via} üzerinden {time} saatinde canlı okundu.',
+    footHolidays: 'Çin resmî tatilleri: {src} ({years}).',
+    unavailable:  'mevcut değil',
+    missingYears: '⚠ {years} için tatil verisi yok: Bu günler normal iş günü olarak kabul edilir.',
+    testClock:    '⚠ Test saati etkin ({param}).',
+    officialRule: 'Resmî kural (orijinal metin):',
+    reload:       'Verileri yeniden yükle',
+    errTitle:     'Güncel fiyatlar yüklenemedi',
+    errRead:      'Resmî fiyat sayfası okunamadı.',
+    errBody:      'Önbellekteki veya sabit kodlanmış fiyatlar gösterilmez. Lütfen {link} doğrudan kontrol edin veya tekrar deneyin.',
+    errLink:      'resmî fiyat sayfasını',
+    tryAgain:     'Tekrar dene',
+    units:        { d: 'g', h: 'sa', m: 'dk' },
+  },
+};
+
+// Chinese holiday names as published in holiday-cn, translated (fallback: en).
+const HOLIDAY_NAMES = {
+  '元旦':   { en: "New Year's Day",       de: 'Neujahr',                tr: 'Yılbaşı' },
+  '春节':   { en: 'Spring Festival',      de: 'Frühlingsfest',          tr: 'Bahar Bayramı (Çin Yeni Yılı)' },
+  '清明节': { en: 'Qingming Festival',    de: 'Qingming-Fest',          tr: 'Qingming Bayramı' },
+  '劳动节': { en: 'Labour Day',           de: 'Tag der Arbeit',         tr: 'İşçi Bayramı' },
+  '端午节': { en: 'Dragon Boat Festival', de: 'Drachenbootfest',        tr: 'Ejderha Teknesi Festivali' },
+  '中秋节': { en: 'Mid-Autumn Festival',  de: 'Mondfest',               tr: 'Ay Festivali' },
+  '国庆节': { en: 'National Day',         de: 'Nationalfeiertag',       tr: 'Ulusal Gün' },
+};
+
+// Language dropdown: one entry per language in I18N (code shown, e.g. "DE").
+for (const code of Object.keys(I18N)) {
+  const li = document.createElement('li');
+  const btn = document.createElement('button');
+  btn.dataset.lang = code;
+  btn.setAttribute('role', 'option');
+  btn.textContent = code.toUpperCase();
+  li.append(btn);
+  document.querySelector('.lang-menu').append(li);
+}
+
+// ?lang=xx (set by the dropdown) wins; without it the browser language is used.
+let LANG, LOCALE;
+function applyLang(code) {
+  const primary = code.split('-')[0].toLowerCase();
+  LANG = Object.hasOwn(I18N, primary) ? primary : 'en';
+  // Dates use the same language as the texts (keeping the regional variant, e.g. de-AT).
+  LOCALE = primary === LANG ? code : 'en';
+  document.documentElement.lang = LANG; // also makes CSS uppercase correct for Turkish (i → İ)
+  document.title = txt('title');
+  document.querySelectorAll('[data-lang]').forEach(b => {
+    b.classList.toggle('active', b.dataset.lang === LANG);
+    b.setAttribute('aria-selected', b.dataset.lang === LANG);
+  });
+  document.querySelector('.lang-current .code').textContent = LANG.toUpperCase();
+  document.querySelector('.tagline').textContent = txt('subtitle');
+  document.querySelector('[data-mode="local"]').textContent = txt('local');
+  const loading = document.querySelector('.loading');
+  if (loading) loading.textContent = txt('loading');
+}
+
+// Keys missing in a (new) language fall back to English.
+const txt = (key, vars = {}) => (I18N[LANG][key] ?? I18N.en[key]).replace(/\{(\w+)\}/g, (_, k) => vars[k]);
+const units = () => I18N[LANG].units ?? I18N.en.units;
+applyLang(new URLSearchParams(location.search).get('lang') || navigator.language || 'en');
+
+const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
+const FETCH_TIMEOUT = 15000;
+
+// ?now=2026-09-25T02:30:00Z shifts the clock for testing (keeps ticking).
+const nowParam = new URLSearchParams(location.search).get('now');
+const clockOffset = nowParam && !isNaN(Date.parse(nowParam)) ? Date.parse(nowParam) - Date.now() : 0;
+const now = () => Date.now() + clockOffset;
+
+const state = {
+  pricing: null,      // { models, rules, via, fetchedAt }
+  holidays: new Map(),// 'YYYY-MM-DD' (Beijing date) -> name
+  holidayYears: [],
+  mode: localStorage.getItem('offpeak-radar-mode') === 'utc' ? 'utc' : 'local',
+};
+
+// ---------------------------------------------------------------------------
+// Loading
+// ---------------------------------------------------------------------------
+async function fetchText(url, headers) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
+  try {
+    const res = await fetch(url, { headers, signal: ctrl.signal, cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.text();
+  } catch (e) {
+    throw new Error(e.name === 'AbortError' ? 'timeout' : e.message);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function loadPricing() {
+  const errors = [];
+  for (const p of PROXIES) {
+    try {
+      const html = await fetchText(p.url(SOURCE_URL), p.headers);
+      return { ...parsePricing(html), via: p.name, fetchedAt: Date.now() };
+    } catch (e) {
+      errors.push(`${p.name}: ${e.message}`);
+    }
+  }
+  const err = new Error(txt('errRead'));
+  err.details = errors;
+  throw err;
+}
+
+async function loadHolidays() {
+  const y = new Date(now()).getUTCFullYear();
+  const results = await Promise.allSettled([y - 1, y, y + 1].map(async year => {
+    const data = JSON.parse(await fetchText(HOLIDAY_URL(year)));
+    for (const d of data.days || []) if (d.isOffDay) state.holidays.set(d.date, d.name);
+    return year;
+  }));
+  state.holidayYears = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+}
+
+// ---------------------------------------------------------------------------
+// Parsing the official page
+// ---------------------------------------------------------------------------
+function cellText(cell) {
+  const c = cell.cloneNode(true);
+  c.querySelectorAll('sup').forEach(s => s.remove());
+  c.querySelectorAll('br').forEach(b => b.replaceWith(' '));
+  return c.textContent.replace(/\s+/g, ' ').trim();
+}
+
+// Expands rowspan/colspan into a plain matrix of { cell, text }.
+function tableToGrid(table) {
+  const grid = [];
+  [...table.rows].forEach((tr, r) => {
+    grid[r] = grid[r] || [];
+    let c = 0;
+    for (const cell of tr.cells) {
+      while (grid[r][c]) c++;
+      const entry = { cell, text: cellText(cell) };
+      for (let i = 0; i < (cell.rowSpan || 1); i++) {
+        grid[r + i] = grid[r + i] || [];
+        for (let j = 0; j < (cell.colSpan || 1); j++) grid[r + i][c + j] = entry;
+      }
+      c += cell.colSpan || 1;
+    }
+  });
+  return grid;
+}
+
+function parsePrice(text) {
+  const m = text.match(/([$¥€£])?\s*(\d[\d,]*(?:\.\d+)?)/);
+  if (!m) return null;
+  return { value: parseFloat(m[2].replace(/,/g, '')), cur: m[1] || '$', raw: text };
+}
+
+const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+function parseRules(doc) {
+  const para = [...doc.querySelectorAll('p, li')].map(e => e.textContent.replace(/\s+/g, ' '))
+    .find(t => /peak hours/i.test(t));
+  if (!para) throw new Error('peak-hours rule not found');
+  const sentence = para.slice(para.search(/peak hours/i)).split(/\.\s/)[0] + '.';
+  const full = para.slice(para.search(/off-peak rates|peak hours/i)).trim();
+
+  const windows = [...sentence.matchAll(/(\d{1,2}):(\d{2})\s*(?:-|–|—|~|to)\s*(\d{1,2}):(\d{2})/g)]
+    .map(m => ({ start: +m[1] * 60 + +m[2], end: +m[3] * 60 + +m[4] }));
+  if (!windows.length) throw new Error('no peak windows in rule');
+
+  let tzOffsetMin;
+  const off = sentence.match(/(?:UTC|GMT)\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?/i);
+  if (off) tzOffsetMin = (off[1] === '-' ? -1 : 1) * (+off[2] * 60 + +(off[3] || 0));
+  else if (/\b(UTC|GMT)\b/i.test(sentence)) tzOffsetMin = 0;
+  else if (/beijing/i.test(sentence)) tzOffsetMin = 480;
+  else throw new Error('no timezone in rule');
+
+  let days;
+  const range = sentence.match(new RegExp(`(${DAY_NAMES.join('|')})\\s*(?:through|to|-|–)\\s*(${DAY_NAMES.join('|')})`, 'i'));
+  if (range) {
+    days = new Set();
+    let d = DAY_NAMES.indexOf(range[1].toLowerCase());
+    const end = DAY_NAMES.indexOf(range[2].toLowerCase());
+    for (;;) { days.add(d); if (d === end) break; d = (d + 1) % 7; }
+  } else if (/weekdays/i.test(sentence)) {
+    days = new Set([1, 2, 3, 4, 5]);
+  } else {
+    days = new Set([0, 1, 2, 3, 4, 5, 6]);
+  }
+
+  const excludeCnHolidays = /excluding[^.]*chinese public holidays/i.test(sentence);
+  return { windows, tzOffsetMin, days, excludeCnHolidays, text: full };
+}
+
+function parsePricing(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const table = [...doc.querySelectorAll('table')].find(t => /output tokens/i.test(t.textContent));
+  if (!table) throw new Error('pricing table not found');
+  const grid = tableToGrid(table);
+
+  const modelRow = grid.find(r => /^model$/i.test(r[0]?.text));
+  if (!modelRow) throw new Error('model row not found');
+  const labelCols = modelRow.findIndex(e => e.cell !== modelRow[0].cell);
+  const cols = [];
+  for (let c = labelCols; c < modelRow.length; c++) {
+    if (!cols.length || modelRow[c].cell !== modelRow[cols[cols.length - 1]].cell) cols.push(c);
+  }
+
+  const models = cols.map(c => ({
+    id: modelRow[c].text, name: modelRow[c].text, version: '',
+    inputHit: {}, inputMiss: {}, output: {},
+  }));
+
+  for (const row of grid) {
+    const labels = [...new Set(row.slice(0, labelCols).map(e => e.cell))].map(cell => cellText(cell)).join(' ');
+    if (/model version/i.test(labels)) {
+      cols.forEach((c, i) => {
+        const v = row[c].text;
+        models[i].version = v;
+        models[i].name = v.replace(/-\d{4}$/, '').replace(/-/g, ' ');
+      });
+      continue;
+    }
+    if (!/(input|output)/i.test(labels) || !/peak/i.test(labels)) continue;
+    const kind = /output/i.test(labels) ? 'output' : /hit/i.test(labels) ? 'inputHit' : 'inputMiss';
+    const tier = /off-?\s?peak/i.test(labels) ? 'off' : 'peak';
+    cols.forEach((c, i) => { models[i][kind][tier] = parsePrice(row[c].text); });
+  }
+
+  for (const m of models) {
+    if (!m.inputMiss.peak || !m.inputMiss.off || !m.output.peak || !m.output.off) {
+      throw new Error(`incomplete prices for ${m.id}`);
+    }
+  }
+  return { models, rules: parseRules(doc) };
+}
+
+// ---------------------------------------------------------------------------
+// Schedule engine
+// ---------------------------------------------------------------------------
+function beijingDate(t) { return new Date(t + 8 * HOUR).toISOString().slice(0, 10); }
+
+function holidayAt(t) {
+  const name = state.holidays.get(beijingDate(t));
+  if (!name) return null;
+  const label = name.split(/[、,，]/).map(n => HOLIDAY_NAMES[n.trim()]?.[LANG] || HOLIDAY_NAMES[n.trim()]?.en || n.trim()).join(' / ');
+  return { name, label };
+}
+
+// Merged [start, end] peak intervals overlapping [from, to].
+function peakIntervals(from, to) {
+  const { windows, tzOffsetMin, days, excludeCnHolidays } = state.pricing.rules;
+  const shift = tzOffsetMin * MIN;
+  const out = [];
+  for (let d = Math.floor((from + shift) / DAY) * DAY - DAY; d - shift < to + DAY; d += DAY) {
+    if (!days.has(new Date(d).getUTCDay())) continue;
+    for (const w of windows) {
+      const s = d - shift + w.start * MIN;
+      const e = d - shift + w.end * MIN + (w.end <= w.start ? DAY : 0);
+      if (excludeCnHolidays && holidayAt(s)) continue;
+      if (e > from && s < to) out.push([s, e]);
+    }
+  }
+  out.sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const iv of out) {
+    const last = merged[merged.length - 1];
+    if (last && iv[0] <= last[1]) last[1] = Math.max(last[1], iv[1]);
+    else merged.push([...iv]);
+  }
+  return merged;
+}
+
+// Alternating { start, end, peak } segments covering [from, to].
+function segments(from, to) {
+  const segs = [];
+  let cur = from;
+  for (let [s, e] of peakIntervals(from, to)) {
+    s = Math.max(s, from); e = Math.min(e, to);
+    if (s > cur) segs.push({ start: cur, end: s, peak: false });
+    segs.push({ start: s, end: e, peak: true });
+    cur = e;
+  }
+  if (cur < to) segs.push({ start: cur, end: to, peak: false });
+  return segs;
+}
+
+// ---------------------------------------------------------------------------
+// Formatting
+// ---------------------------------------------------------------------------
+const tz = () => (state.mode === 'utc' ? 'UTC' : undefined);
+const fmt = (t, opts) => new Intl.DateTimeFormat(LOCALE, { timeZone: tz(), ...opts }).format(t);
+const fmtTime = t => fmt(t, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+// Adds the date when the weekday alone would be ambiguous (6+ days away).
+const fmtDayTime = t => fmt(t, {
+  weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  ...(Math.abs(t - now()) >= 6 * DAY ? { day: 'numeric', month: 'short' } : {}),
+});
+const fmtTzName = t => fmt(t, { timeZoneName: 'short' }).split(/\s/).pop();
+const dayKey = t => new Intl.DateTimeFormat('en-CA', { timeZone: tz() }).format(t);
+
+function fmtPrice(p) {
+  return p.cur + p.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
+
+function fmtDuration(ms) {
+  const u = units();
+  const totalMin = Math.round(ms / MIN);
+  const d = Math.floor(totalMin / 1440), h = Math.floor(totalMin / 60) % 24, m = totalMin % 60;
+  return [d && `${d}${u.d}`, h && `${h}${u.h}`, m && `${m}${u.m}`].filter(Boolean).join(' ') || `0${u.m}`;
+}
+
+function tzLabel() {
+  if (state.mode === 'utc') return 'UTC · GMT+0';
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const offMin = -new Date(now()).getTimezoneOffset();
+  const sign = offMin >= 0 ? '+' : '-';
+  const abs = Math.abs(offMin);
+  return `${zone} · GMT${sign}${Math.floor(abs / 60)}${abs % 60 ? ':' + String(abs % 60).padStart(2, '0') : ''}`;
+}
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+function discountLabel(models) {
+  const m = models[0];
+  const ratio = m.output.off.value / m.output.peak.value;
+  if (Math.abs(ratio - 0.5) < 0.01) return txt('halfPrice');
+  return txt('percentOff', { n: Math.round((1 - ratio) * 100) });
+}
+
+const kindName = peak => txt(peak ? 'peak' : 'offPeak');
+const kindCls = peak => (peak ? 'peak' : 'off'); // also the price tier key
+
+// Calendar day k days after today (local or UTC); DST-safe.
+function dayRange(t, k) {
+  const d = new Date(t);
+  if (state.mode === 'utc') {
+    const s = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + k);
+    return [s, s + DAY];
+  }
+  return [new Date(d.getFullYear(), d.getMonth(), d.getDate() + k).getTime(),
+          new Date(d.getFullYear(), d.getMonth(), d.getDate() + k + 1).getTime()];
+}
+
+// Would t be in a peak window if there were no holiday?
+function inRuleWindow(t) {
+  const { windows, tzOffsetMin, days } = state.pricing.rules;
+  const d = new Date(t + tzOffsetMin * MIN);
+  if (!days.has(d.getUTCDay())) return false;
+  const m = d.getUTCHours() * 60 + d.getUTCMinutes();
+  return windows.some(w => (w.end > w.start ? m >= w.start && m < w.end : m >= w.start || m < w.end));
+}
+
+// Chinese holiday that cancels peak hours within [from, to), if any.
+function holidayIn(from, to) {
+  if (!state.pricing.rules.excludeCnHolidays) return null;
+  for (let x = from; x < to; x += 30 * MIN) {
+    const h = inRuleWindow(x) && holidayAt(x);
+    if (h) return h;
+  }
+  return null;
+}
+
+function countdownParts(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(s / 86400), h = Math.floor(s / 3600) % 24, m = Math.floor(s / 60) % 60, sec = s % 60;
+  const pad = n => String(n).padStart(2, '0');
+  return { days: d ? `${d}${units().d}` : '', hms: `${d ? pad(h) : h}:${pad(m)}:${pad(sec)}` };
+}
+
+function syncControls() {
+  document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === state.mode));
+}
+
+function render() {
+  const t = now();
+  const { models, rules, via, fetchedAt } = state.pricing;
+
+  const wide = segments(t - 21 * DAY, t + 21 * DAY);
+  const i = wide.findIndex(s => s.start <= t && t < s.end);
+  const cur = wide[i], next = wide[i + 1];
+  const cls = kindCls(cur.peak);
+  const holiday = rules.excludeCnHolidays ? holidayAt(t) : null;
+
+  // Hero: status, next change, holiday notes, upcoming changes
+  const status = cur.peak ? txt('statusPeak') : txt('statusOff', { discount: discountLabel(models) });
+  const flipText = next
+    ? txt('starts', { kind: kindName(next.peak), when: `${fmtDayTime(next.start)} ${fmtTzName(next.start)}` })
+    : txt('noChange');
+  let holidayNote = holiday
+    ? `<div class="note">${txt('holidayToday', { name: esc(holiday.label) })}</div>` : '';
+  if (!cur.peak && rules.excludeCnHolidays) {
+    // Holidays (other than today) that stretch the current off-peak window.
+    const seen = new Set([beijingDate(t)]);
+    const ahead = [];
+    for (let d = t; d < cur.end; d += HOUR) {
+      const key = beijingDate(d);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const h = holidayAt(d);
+      const wd = new Date(Date.parse(key + 'T00:00:00Z')).getUTCDay();
+      if (h && rules.days.has(wd)) ahead.push(`${fmt(Date.parse(key + 'T12:00:00Z'), { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })} ${esc(h.label)}`);
+    }
+    if (ahead.length) holidayNote += `<div class="note">${txt('holidayAhead', { list: ahead.join(', ') })}</div>`;
+  }
+  const upcoming = wide.slice(i + 1, i + 5).map(s => `
+    <li><span class="dot ${kindCls(s.peak)}"></span><span>${fmtDayTime(s.start)}</span>
+      <span class="kind ${kindCls(s.peak)}">${kindName(s.peak)}</span><span class="dur">${fmtDuration(s.end - s.start)}</span></li>`).join('');
+
+  // Countdown ring: coloured part = share of the current window still remaining
+  const cd = countdownParts(cur.end - t);
+  const remaining = (cur.end - t) / (cur.end - cur.start) * 100;
+
+  // 7-day overview
+  const hours = [0, 6, 12, 18, 24].map(h => `<span style="left:${h / 24 * 100}%">${String(h).padStart(2, '0')}</span>`).join('');
+  const week = Array.from({ length: 7 }, (_, k) => {
+    const [d0, d1] = dayRange(t, k);
+    const pos = x => (x - d0) / (d1 - d0) * 100;
+    const segs = wide.filter(s => s.end > d0 && s.start < d1).map(s => {
+      const a = Math.max(s.start, d0), b = Math.min(s.end, d1);
+      return `<div class="seg ${kindCls(s.peak)}" style="left:${pos(a)}%;width:${pos(b) - pos(a)}%"
+        title="${kindName(s.peak)} ${fmtTime(a)}–${b === d1 ? '24:00' : fmtTime(b)}"></div>`;
+    }).join('');
+    const marker = k === 0 ? `<div class="marker" style="left:${pos(t)}%"></div>` : '';
+    const h = holidayIn(d0, d1);
+    const label = k === 0 ? txt('today') : fmt(d0 + 12 * HOUR, { weekday: 'short', day: 'numeric' });
+    return `<div class="day${k === 0 ? ' today' : ''}">
+      <span class="day-label">${esc(label)}</span>
+      <div class="strip">${segs}${marker}</div>
+      <span class="tag">${h ? `<span title="${esc(h.label)}">${txt('holiday')}</span>` : ''}</span></div>`;
+  }).join('');
+
+  // Price table: now vs. after the next change
+  const priceRows = models.map(m => `
+    <tr class="model"><th colspan="${next ? 3 : 2}">${esc(m.name)}<code title="${esc(m.version)}">${esc(m.id)}</code></th></tr>
+    ${[['input', m.inputMiss], ['cachedInput', m.inputHit], ['output', m.output]]
+      .filter(([, p]) => p.peak && p.off)
+      .map(([key, p]) => `<tr><td>${txt(key)}</td><td class="now">${fmtPrice(p[cls])}</td>${next ? `<td>${fmtPrice(p[kindCls(next.peak)])}</td>` : ''}</tr>`)
+      .join('')}`).join('');
+
+  const missingYears = [new Date(t).getUTCFullYear(), new Date(next ? next.start : t).getUTCFullYear()]
+    .filter(y => !state.holidayYears.includes(y));
+
+  document.getElementById('app').innerHTML = `
+    <section class="card hero ${cls}">
+      <div class="ring" style="--p:${remaining}">
+        <div class="ring-inner">
+          ${cd.days ? `<div class="ring-days">${cd.days}</div>` : ''}
+          <div class="ring-time">${cd.hms}</div>
+          <div class="ring-label">${txt('left')}</div>
+        </div>
+      </div>
+      <div class="hero-info">
+        <span class="pill">${status}</span>
+        <div class="next-change">${flipText}</div>
+        ${holidayNote}
+        ${upcoming ? `<div class="upcoming"><div class="sub">${txt('upcoming')}</div><ol>${upcoming}</ol></div>` : ''}
+      </div>
+    </section>
+
+    <section class="card pad">
+      <div class="card-head"><h2>${txt('week')}</h2><span>${esc(tzLabel())}</span></div>
+      <div class="week">
+        <div class="day"><span></span><div class="hour-ticks">${hours}</div><span></span></div>
+        ${week}
+      </div>
+      <div class="legend"><span><i class="off"></i>${kindName(false)}</span><span><i class="peak"></i>${kindName(true)}</span></div>
+    </section>
+
+    <section class="card pad">
+      <div class="card-head"><h2>${txt('prices')}</h2></div>
+      <table class="price-table ${cls}">
+        <thead><tr>
+          <th></th>
+          <th class="now">${txt('nowCol', { kind: kindName(cur.peak) })}</th>
+          ${next ? `<th>${txt('from', { when: fmtDayTime(next.start), kind: kindName(next.peak) })}</th>` : ''}
+        </tr></thead>
+        <tbody>${priceRows}</tbody>
+      </table>
+    </section>
+
+    <footer class="foot">
+      ${txt('footPrices', {
+        src: `<a href="${SOURCE_URL}" target="_blank" rel="noopener">api-docs.deepseek.com</a>`,
+        via: `<b>${esc(via)}</b>`,
+        time: new Date(fetchedAt).toLocaleTimeString(LOCALE),
+      })}
+      ${txt('footHolidays', {
+        src: '<a href="https://github.com/NateScarlet/holiday-cn" target="_blank" rel="noopener">holiday-cn</a>',
+        years: state.holidayYears.join(', ') || txt('unavailable'),
+      })}
+      ${missingYears.length && rules.excludeCnHolidays ? `<br>${txt('missingYears', { years: missingYears.join(', ') })}` : ''}
+      ${clockOffset ? `<br>${txt('testClock', { param: '?now=' + esc(nowParam) })}` : ''}
+      <blockquote>${txt('officialRule')} ${esc(rules.text)}</blockquote>
+      <button id="reload">${txt('reload')}</button>
+    </footer>`;
+}
+
+function renderError(err) {
+  document.getElementById('app').innerHTML = `
+    <section class="card error pad">
+      <h2>${txt('errTitle')}</h2>
+      <p>${esc(err.message)} ${txt('errBody', { link: `<a href="${SOURCE_URL}" target="_blank" rel="noopener">${txt('errLink')}</a>` })}</p>
+      ${err.details ? `<ul>${err.details.map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
+      <p class="foot"><button id="reload">${txt('tryAgain')}</button></p>
+    </section>`;
+}
+
+function setLangMenu(open) {
+  document.querySelector('.lang-menu').hidden = !open;
+  document.querySelector('.lang-current').setAttribute('aria-expanded', open);
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') setLangMenu(false); });
+
+document.addEventListener('click', e => {
+  const mode = e.target.closest('[data-mode]')?.dataset.mode;
+  if (mode) {
+    state.mode = mode;
+    localStorage.setItem('offpeak-radar-mode', mode);
+    syncControls();
+    if (state.pricing) render();
+  }
+  // Language dropdown: the button toggles it, any other click closes it.
+  const toggle = e.target.closest('.lang-current');
+  setLangMenu(toggle ? document.querySelector('.lang-menu').hidden : false);
+
+  const lang = e.target.closest('[data-lang]')?.dataset.lang;
+  if (lang) {
+    // Switch without reloading (no new fetch); the URL keeps the choice for sharing/bookmarks.
+    const url = new URL(location.href);
+    url.searchParams.set('lang', lang);
+    history.replaceState(null, '', url);
+    applyLang(lang);
+    if (state.pricing) render();
+    else if (state.error) renderError(state.error);
+  }
+  if (e.target.id === 'reload') location.reload();
+});
+
+(async function init() {
+  syncControls();
+  try {
+    const [pricing] = await Promise.all([loadPricing(), loadHolidays()]);
+    state.pricing = pricing;
+    render();
+    setInterval(render, 1000);
+  } catch (err) {
+    console.error(err);
+    state.error = err;
+    renderError(err);
+  }
+})();
+</script>
+</body>
+</html>
